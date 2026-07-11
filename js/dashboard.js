@@ -13,6 +13,12 @@ FINGS.dashboard = (function () {
     "payment-out": { label: "Payment Out", icon: "↑", bg: "var(--signal-coral-bg)", fg: "var(--signal-coral)" }
   };
 
+  const STATUS_META = {
+    paid: { label: "Paid", cls: "status-paid" },
+    partial: { label: "Partial", cls: "status-partial" },
+    unpaid: { label: "Unpaid", cls: "status-unpaid" }
+  };
+
   function mergedFeed() {
     const tx = FINGS.data.state.transactions.map(t => ({ kind: "tx", ...t }));
     const pay = FINGS.data.state.payments.map(p => ({ kind: "pay", ...p, type: p.type === "in" ? "payment-in" : "payment-out" }));
@@ -27,30 +33,18 @@ FINGS.dashboard = (function () {
     const isOutflow = entry.type === "purchase" || entry.type === "expense" || entry.type === "payment-out";
     const amountStr = FINGS.util.formatMoneySigned(isOutflow ? -Math.abs(entry.amount) : Math.abs(entry.amount));
     const title = entry.kind === "pay" ? (entry.partyName || "Unnamed party") : (entry.description || "Untitled");
-    const subParts = [FINGS.util.formatDatePretty(entry.date)];
-    if (entry.kind === "pay" && entry.invoiceNo) subParts.push("Inv #" + FINGS.util.escapeHtml(entry.invoiceNo));
 
-    const canEdit = FINGS.auth && FINGS.auth.isAdmin();
-    let linkChip = "";
-    if (canEdit && entry.kind === "tx" && (entry.type === "sale" || entry.type === "purchase")) {
-      const paid = FINGS.data.paidAmountFor(entry.id);
-      const due = Number(entry.amount) - paid;
-      const safeId = FINGS.util.escapeHtml(entry.id);
-      const safeType = FINGS.util.escapeHtml(entry.type);
-      if (due <= 0.0001) {
-        linkChip = `<button class="tx-chip paid-chip" disabled>Paid</button>`;
-      } else if (paid > 0) {
-        linkChip = `<button class="tx-chip link-chip" data-action="link" data-id="${safeId}" data-txtype="${safeType}" data-amount="${due}">Due ${FINGS.util.formatMoney(due)}</button>`;
-      } else {
-        linkChip = `<button class="tx-chip link-chip" data-action="link" data-id="${safeId}" data-txtype="${safeType}" data-amount="${entry.amount}">Link Payment</button>`;
-      }
+    const subParts = [FINGS.util.formatDatePretty(entry.date)];
+    const invoiceNo = entry.invoiceNo;
+    if (invoiceNo) subParts.push("Inv #" + FINGS.util.escapeHtml(invoiceNo));
+
+    let statusChip = "";
+    if (entry.kind === "tx" && (entry.type === "sale" || entry.type === "purchase")) {
+      const status = STATUS_META[entry.paymentStatus] || STATUS_META.unpaid;
+      statusChip = `<span class="tx-chip ${status.cls}">${status.label}</span>`;
     }
 
     const delAction = entry.kind === "pay" ? "delete-payment" : "delete-tx";
-    const safeDeleteId = FINGS.util.escapeHtml(entry.id);
-    const deleteButton = canEdit
-      ? `<button class="tx-del" data-action="${delAction}" data-id="${safeDeleteId}" title="Delete">Delete</button>`
-      : "";
 
     return `
       <div class="tx-row">
@@ -66,8 +60,8 @@ FINGS.dashboard = (function () {
         <div class="tx-amount-col">
           <span class="tx-amount" style="color:${meta.fg}">${amountStr}</span>
           <div class="tx-actions">
-            ${linkChip}
-            ${deleteButton}
+            ${statusChip}
+            <button class="tx-del" data-action="${delAction}" data-id="${entry.id}" title="Delete">🗑</button>
           </div>
         </div>
       </div>`;
@@ -95,33 +89,43 @@ FINGS.dashboard = (function () {
   // ---------- forms ----------
   function txFormHtml(type) {
     const meta = TYPE_META[type];
+    const hasInvoice = type === "sale" || type === "purchase";
     return `
       <h3 style="margin:0 0 14px;font-family:var(--font-display)">${meta.label}</h3>
       <form id="entry-form">
         <label class="field"><span>Description</span>
           <input type="text" id="f-description" placeholder="What was this for?" required></label>
+        ${hasInvoice ? `
+        <label class="field"><span>Invoice No.</span>
+          <input type="text" id="f-invoice" placeholder="Optional"></label>` : ""}
         <label class="field"><span>Amount</span>
           <input type="number" id="f-amount" inputmode="decimal" placeholder="0" required min="0.01" step="0.01"></label>
         <label class="field"><span>Date</span>
           <input type="date" id="f-date" value="${FINGS.util.todayISO()}" required></label>
+        ${hasInvoice ? `
+        <label class="field"><span>Payment Status</span>
+          <select id="f-status">
+            <option value="unpaid" selected>Unpaid</option>
+            <option value="partial">Partial</option>
+            <option value="paid">Paid</option>
+          </select></label>` : ""}
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:6px">Save ${meta.label}</button>
       </form>`;
   }
 
-  function paymentFormHtml(type, prefill) {
-    prefill = prefill || {};
+  function paymentFormHtml(type) {
     const meta = TYPE_META[type];
     return `
       <h3 style="margin:0 0 14px;font-family:var(--font-display)">${meta.label}</h3>
       <form id="entry-form">
         <label class="field"><span>Party Name</span>
-          <input type="text" id="f-party" placeholder="Who paid / was paid?" required value="${FINGS.util.escapeHtml(prefill.partyName || "")}"></label>
+          <input type="text" id="f-party" placeholder="Who paid / was paid?" required></label>
         <label class="field"><span>Invoice No.</span>
           <input type="text" id="f-invoice" placeholder="Optional"></label>
         <label class="field"><span>Date</span>
           <input type="date" id="f-date" value="${FINGS.util.todayISO()}" required></label>
         <label class="field"><span>Amount</span>
-          <input type="number" id="f-amount" inputmode="decimal" placeholder="0" required min="0.01" step="0.01" value="${prefill.amount || ""}"></label>
+          <input type="number" id="f-amount" inputmode="decimal" placeholder="0" required min="0.01" step="0.01"></label>
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:6px">Save ${meta.label}</button>
       </form>`;
   }
@@ -146,15 +150,14 @@ FINGS.dashboard = (function () {
   }
 
   function openAddForm(type) {
-    if (!FINGS.auth.isAdmin()) {
-      FINGS.util.toast("Read-only access");
-      return;
-    }
     if (type === "sale" || type === "purchase" || type === "expense") {
       openSheet(txFormHtml(type), async () => {
+        const hasInvoice = type === "sale" || type === "purchase";
         await FINGS.data.addTransaction({
           type,
           description: document.getElementById("f-description").value.trim(),
+          invoiceNo: hasInvoice ? document.getElementById("f-invoice").value.trim() : "",
+          paymentStatus: hasInvoice ? document.getElementById("f-status").value : undefined,
           amount: document.getElementById("f-amount").value,
           date: document.getElementById("f-date").value
         });
@@ -174,25 +177,6 @@ FINGS.dashboard = (function () {
     }
   }
 
-  function openLinkPayment(txId, txType, dueAmount) {
-    if (!FINGS.auth.isAdmin()) {
-      FINGS.util.toast("Read-only access");
-      return;
-    }
-    const payType = txType === "sale" ? "payment-in" : "payment-out";
-    openSheet(paymentFormHtml(payType, { amount: dueAmount }), async () => {
-      await FINGS.data.addPayment({
-        type: payType === "payment-in" ? "in" : "out",
-        partyName: document.getElementById("f-party").value.trim(),
-        invoiceNo: document.getElementById("f-invoice").value.trim(),
-        date: document.getElementById("f-date").value,
-        amount: document.getElementById("f-amount").value,
-        linkedTransactionId: txId
-      });
-      FINGS.util.toast("Payment linked");
-    });
-  }
-
   function bindEvents() {
     document.getElementById("transaction-list").addEventListener("click", handleListClick);
     document.getElementById("report-list") && document.getElementById("report-list").addEventListener("click", handleListClick);
@@ -207,13 +191,9 @@ FINGS.dashboard = (function () {
   async function handleListClick(e) {
     const btn = e.target.closest("button[data-action]");
     if (!btn) return;
-    if (!FINGS.auth.isAdmin()) {
-      FINGS.util.toast("Read-only access");
-      return;
-    }
     const action = btn.dataset.action;
     if (action === "delete-tx") {
-      if (confirm("Delete this entry? Linked payments will also be removed.")) {
+      if (confirm("Delete this entry?")) {
         await FINGS.data.deleteTransaction(btn.dataset.id);
         FINGS.util.toast("Deleted");
       }
@@ -222,8 +202,6 @@ FINGS.dashboard = (function () {
         await FINGS.data.deletePayment(btn.dataset.id);
         FINGS.util.toast("Deleted");
       }
-    } else if (action === "link") {
-      openLinkPayment(btn.dataset.id, btn.dataset.txtype, btn.dataset.amount);
     }
   }
 

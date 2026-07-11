@@ -3,9 +3,10 @@
    Collections:
      config/business   { name, openingBalance, manualAdjustment }
      transactions/{id} { type: sale|purchase|expense, description,
-                          amount, date, createdAt }
+                          invoiceNo, paymentStatus, amount, date, createdAt }
+                        (invoiceNo/paymentStatus only used for sale/purchase)
      payments/{id}     { type: in|out, partyName, invoiceNo, date,
-                          amount, linkedTransactionId, createdAt }
+                          amount, createdAt }
      users/{username}  { username, passwordHash, name, role, createdAt }
    ========================================================= */
 window.FINGS = window.FINGS || {};
@@ -22,49 +23,9 @@ FINGS.data = (function () {
     ready: { business: false, transactions: false, payments: false, users: false }
   };
 
-  function assertFirebaseConfig() {
-    if (typeof firebase === "undefined") {
-      throw new Error("Firebase SDK did not load. Check your internet connection.");
-    }
-    if (typeof FINGS_isFirebaseConfigComplete !== "function" || !FINGS_isFirebaseConfigComplete(FINGS_FIREBASE_CONFIG)) {
-      throw new Error("Firebase config is incomplete. Paste the Web App config into js/config.js.");
-    }
-  }
-
-  function cleanUsername(username) {
-    return String(username || "").trim();
-  }
-
-  function assertValidUsername(username) {
-    if (!username) throw new Error("Username is required.");
-    if (username.length > 40) throw new Error("Username must be 40 characters or less.");
-    if (!/^[A-Za-z0-9_.-]+$/.test(username)) {
-      throw new Error("Use only letters, numbers, dots, underscores, or dashes in usernames.");
-    }
-  }
-
-  function cleanAmount(amount) {
-    const value = Number(amount);
-    if (!Number.isFinite(value) || value <= 0) throw new Error("Enter a valid amount greater than 0.");
-    return Math.round(value * 100) / 100;
-  }
-
-  function cleanDate(date) {
-    const value = String(date || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new Error("Select a valid date.");
-    return value;
-  }
-
-  function requireAdminWrite() {
-    if (!FINGS.auth || !FINGS.auth.isAdmin()) {
-      throw new Error("Read-only access. Only admin can make changes.");
-    }
-  }
-
   async function init() {
     if (db) return db;
-    assertFirebaseConfig();
-    if (!firebase.apps.length) firebase.initializeApp(FINGS_FIREBASE_CONFIG);
+    firebase.initializeApp(FINGS_FIREBASE_CONFIG);
     db = firebase.firestore();
     // Sign in anonymously so Firestore security rules can require
     // request.auth != null instead of being left wide open. This is a
@@ -133,52 +94,38 @@ FINGS.data = (function () {
   }
 
   // ---------- transactions (sale / purchase / expense) ----------
-  async function addTransaction({ type, description, amount, date }) {
-    requireAdminWrite();
-    if (!["sale", "purchase", "expense"].includes(type)) throw new Error("Invalid entry type.");
-    await db.collection("transactions").add({
-      type,
-      description: String(description || "").trim(),
-      amount: cleanAmount(amount),
-      date: cleanDate(date),
+  async function addTransaction({ type, description, invoiceNo, paymentStatus, amount, date }) {
+    const payload = {
+      type, description, amount: Number(amount), date,
       createdAt: Date.now()
-    });
+    };
+    // invoice number & payment status only apply to sale/purchase, not expense
+    if (type === "sale" || type === "purchase") {
+      payload.invoiceNo = invoiceNo || "";
+      payload.paymentStatus = paymentStatus || "unpaid";
+    }
+    await db.collection("transactions").add(payload);
   }
 
   async function deleteTransaction(id) {
-    requireAdminWrite();
-    // cascade-delete linked payments so the bank balance stays accurate
-    const linked = state.payments.filter(p => p.linkedTransactionId === id);
-    const batch = db.batch();
-    linked.forEach(p => batch.delete(db.collection("payments").doc(p.id)));
-    batch.delete(db.collection("transactions").doc(id));
-    await batch.commit();
+    await db.collection("transactions").doc(id).delete();
   }
 
   // ---------- payments (in / out) ----------
-  async function addPayment({ type, partyName, invoiceNo, date, amount, linkedTransactionId }) {
-    requireAdminWrite();
-    if (!["in", "out"].includes(type)) throw new Error("Invalid payment type.");
+  async function addPayment({ type, partyName, invoiceNo, date, amount }) {
     await db.collection("payments").add({
       type, partyName: partyName || "", invoiceNo: invoiceNo || "",
-      date: cleanDate(date),
-      amount: cleanAmount(amount),
-      linkedTransactionId: linkedTransactionId || null,
+      date, amount: Number(amount),
       createdAt: Date.now()
     });
   }
 
   async function deletePayment(id) {
-    requireAdminWrite();
     await db.collection("payments").doc(id).delete();
   }
 
   // ---------- users ----------
   async function addUser({ username, password, name, role }) {
-    requireAdminWrite();
-    username = cleanUsername(username);
-    assertValidUsername(username);
-    if (!password || String(password).length < 4) throw new Error("Password must be at least 4 characters.");
     const ref = db.collection("users").doc(username);
     const existing = await ref.get();
     if (existing.exists) throw new Error("That username is already taken.");
@@ -191,25 +138,17 @@ FINGS.data = (function () {
   }
 
   async function findUser(username) {
-    username = cleanUsername(username);
-    if (!username) return null;
     const snap = await db.collection("users").doc(username).get();
     return snap.exists ? snap.data() : null;
   }
 
   // ---------- business config ----------
   async function saveBusinessConfig({ name, openingBalance, actualBalance }) {
-    requireAdminWrite();
-    const opening = Number(openingBalance || 0);
-    const actual = Number(actualBalance || 0);
-    if (!Number.isFinite(opening) || !Number.isFinite(actual)) throw new Error("Enter valid balance amounts.");
     const totals = computeTotals();
-    const derivedBeforeAdjustment = opening + totals.paymentIn - totals.paymentOut - totals.expense;
-    const manualAdjustment = actual - derivedBeforeAdjustment;
+    const derivedBeforeAdjustment = Number(openingBalance) + totals.paymentIn - totals.paymentOut - totals.expense;
+    const manualAdjustment = Number(actualBalance) - derivedBeforeAdjustment;
     await db.collection("config").doc("business").set({
-      name: String(name || "").trim(),
-      openingBalance: Math.round(opening * 100) / 100,
-      manualAdjustment: Math.round(manualAdjustment * 100) / 100
+      name: name || "", openingBalance: Number(openingBalance) || 0, manualAdjustment
     }, { merge: true });
   }
 
@@ -238,9 +177,41 @@ FINGS.data = (function () {
       + Number(state.business.manualAdjustment || 0);
   }
 
-  function paidAmountFor(transactionId) {
-    return state.payments.filter(p => p.linkedTransactionId === transactionId)
+  // ---------- opening / closing balance as of a given date ----------
+  // Balance = base opening balance + manual adjustment, plus every
+  // payment-in/payment-out/expense dated on-or-before `iso`.
+  function balanceThroughDate(iso) {
+    const upTo = (d) => (d || "") <= iso;
+    const paymentIn = state.payments.filter(p => p.type === "in" && upTo(p.date))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const paymentOut = state.payments.filter(p => p.type === "out" && upTo(p.date))
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const expense = state.transactions.filter(t => t.type === "expense" && upTo(t.date))
+      .reduce((s, t) => s + Number(t.amount || 0), 0);
+    return Number(state.business.openingBalance || 0)
+      + Number(state.business.manualAdjustment || 0)
+      + paymentIn - paymentOut - expense;
+  }
+
+  function dayBefore(iso) {
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function lastDayOfMonth(monthStr) {
+    const [y, m] = monthStr.split("-").map(Number);
+    return new Date(y, m, 0).toISOString().slice(0, 10); // day 0 of next month
+  }
+
+  function dailyBalances(iso) {
+    return { opening: balanceThroughDate(dayBefore(iso)), closing: balanceThroughDate(iso) };
+  }
+
+  function monthlyBalances(monthStr) {
+    const firstDay = monthStr + "-01";
+    const lastDay = lastDayOfMonth(monthStr);
+    return { opening: balanceThroughDate(dayBefore(firstDay)), closing: balanceThroughDate(lastDay) };
   }
 
   function entriesForDay(iso) {
@@ -270,7 +241,8 @@ FINGS.data = (function () {
     addPayment, deletePayment,
     addUser, findUser,
     saveBusinessConfig,
-    computeTotals, actualBalance, paidAmountFor,
+    computeTotals, actualBalance,
+    dailyBalances, monthlyBalances,
     entriesForDay, entriesForMonth,
     state
   };

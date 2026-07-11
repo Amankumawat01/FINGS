@@ -13,7 +13,10 @@ FINGS.reports = (function () {
     const monthStr = selectedMonth();
     const totals = FINGS.data.computeTotals(monthStr);
     const net = totals.paymentIn - totals.paymentOut - totals.expense;
+    const bal = FINGS.data.monthlyBalances(monthStr);
 
+    document.getElementById("report-opening").textContent = FINGS.util.formatMoney(bal.opening);
+    document.getElementById("report-closing").textContent = FINGS.util.formatMoney(bal.closing);
     document.getElementById("report-sale").textContent = FINGS.util.formatMoney(totals.sale);
     document.getElementById("report-purchase").textContent = FINGS.util.formatMoney(totals.purchase);
     document.getElementById("report-expense").textContent = FINGS.util.formatMoney(totals.expense);

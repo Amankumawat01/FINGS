@@ -291,8 +291,11 @@ body {
   font-size: 10.5px; font-weight: 600; padding: 3px 8px; border-radius: 20px;
   border: 1px solid var(--panel-line); color: var(--muted-steel); background: transparent; cursor: pointer;
 }
-.tx-chip.link-chip { color: var(--ledger-gold); border-color: var(--ledger-gold); }
-.tx-chip.paid-chip { color: var(--ledger-emerald); border-color: var(--ledger-emerald); }
+.tx-chip.status-paid { color: var(--ledger-emerald); border-color: var(--ledger-emerald); }
+.tx-chip.status-partial { color: var(--ledger-gold); border-color: var(--ledger-gold); }
+.tx-chip.status-unpaid { color: var(--signal-coral); border-color: var(--signal-coral); }
+.tx-chip.status-received { color: var(--ledger-emerald); border-color: var(--ledger-emerald); }
+.tx-chip.status-notreceived { color: var(--signal-coral); border-color: var(--signal-coral); }
 .tx-del {
   border: none; background: transparent; color: var(--muted-steel); cursor: pointer; font-size: 15px; padding: 4px;
 }

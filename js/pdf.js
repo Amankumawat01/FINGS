@@ -5,26 +5,7 @@ window.FINGS = window.FINGS || {};
 
 FINGS.pdf = (function () {
 
-  function pdfMoney(n) {
-    const num = Number(n) || 0;
-    const sign = num < 0 ? "-" : "";
-    return sign + "Rs. " + Math.abs(num).toLocaleString("en-IN", {
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 0
-    });
-  }
-
-  function linkedLabel(payment) {
-    if (!payment.linkedTransactionId) return "-";
-    const tx = FINGS.data.state.transactions.find(t => t.id === payment.linkedTransactionId);
-    if (!tx) return "Linked invoice";
-    const label = tx.type === "sale" ? "Sale" : tx.type === "purchase" ? "Purchase" : "Entry";
-    return `${label}: ${tx.description || "-"} (${pdfMoney(tx.amount)})`;
-  }
-
-  function totalAmount(rows) {
-    return rows.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  }
+  const STATUS_LABEL = { paid: "Paid", partial: "Partial", unpaid: "Unpaid", received: "Received", notreceived: "Not Received" };
 
   function newDoc(title, subtitle) {
     const { jsPDF } = window.jspdf;
@@ -60,7 +41,7 @@ FINGS.pdf = (function () {
       startY: startY + 8,
       head: [head],
       body: rows,
-      styles: { fontSize: 8.5, cellPadding: 5, overflow: "linebreak" },
+      styles: { fontSize: 9, cellPadding: 5 },
       headStyles: { fillColor: [22, 40, 61] },
       margin: { left: 40, right: 40 }
     });
@@ -84,54 +65,67 @@ FINGS.pdf = (function () {
 
   function generateDailyReport(iso) {
     const d = FINGS.data.entriesForDay(iso);
-    const doc = newDoc("Daily Report", FINGS.util.formatDatePretty(iso));
+    const bal = FINGS.data.dailyBalances(iso);
+    const money = FINGS.util.formatMoney;
+    const dateLabel = FINGS.util.formatDatePretty(iso);
+    const doc = newDoc("Daily Report", dateLabel);
 
     let y = summaryBlock(doc, 100, [
-      ["Total Sale", pdfMoney(totalAmount(d.sales))],
-      ["Total Purchase", pdfMoney(totalAmount(d.purchases))],
-      ["Total Expense", pdfMoney(totalAmount(d.expenses))],
-      ["Payment In", pdfMoney(totalAmount(d.paymentsIn))],
-      ["Payment Out", pdfMoney(totalAmount(d.paymentsOut))]
+      ["Opening Balance", money(bal.opening)],
+      ["Closing Balance", money(bal.closing)],
+      ["Total Sale", money(d.sales.reduce((s, t) => s + Number(t.amount), 0))],
+      ["Total Purchase", money(d.purchases.reduce((s, t) => s + Number(t.amount), 0))],
+      ["Total Expense", money(d.expenses.reduce((s, t) => s + Number(t.amount), 0))],
+      ["Payment In", money(d.paymentsIn.reduce((s, t) => s + Number(t.amount), 0))],
+      ["Payment Out", money(d.paymentsOut.reduce((s, t) => s + Number(t.amount), 0))]
     ]);
 
-    y = addSectionTable(doc, y, "Sales", ["#", "Description / Bill", "Amount"],
-      d.sales.map((t, i) => [i + 1, t.description || "-", pdfMoney(t.amount)]), "No sales recorded.");
-    y = addSectionTable(doc, y, "Purchases", ["#", "Description / Bill", "Amount"],
-      d.purchases.map((t, i) => [i + 1, t.description || "-", pdfMoney(t.amount)]), "No purchases recorded.");
-    y = addSectionTable(doc, y, "Expenses", ["#", "Description", "Amount"],
-      d.expenses.map((t, i) => [i + 1, t.description || "-", pdfMoney(t.amount)]), "No expenses recorded.");
-    y = addSectionTable(doc, y, "Payment In", ["#", "Party", "Invoice No.", "Linked Bill", "Amount"],
-      d.paymentsIn.map((p, i) => [i + 1, p.partyName || "-", p.invoiceNo || "-", linkedLabel(p), pdfMoney(p.amount)]), "No payments received.");
-    y = addSectionTable(doc, y, "Payment Out", ["#", "Party", "Invoice No.", "Linked Bill", "Amount"],
-      d.paymentsOut.map((p, i) => [i + 1, p.partyName || "-", p.invoiceNo || "-", linkedLabel(p), pdfMoney(p.amount)]), "No payments made.");
+    y = addSectionTable(doc, y, "Sales", ["Date", "Invoice No.", "Description", "Status", "Amount"],
+      d.sales.map(t => [dateLabel, t.invoiceNo || "-", t.description || "-", STATUS_LABEL[t.paymentStatus] || "Not Received", money(t.amount)]),
+      "No sales recorded.");
+    y = addSectionTable(doc, y, "Purchases", ["Date", "Invoice No.", "Description", "Status", "Amount"],
+      d.purchases.map(t => [dateLabel, t.invoiceNo || "-", t.description || "-", STATUS_LABEL[t.paymentStatus] || "Unpaid", money(t.amount)]),
+      "No purchases recorded.");
+    y = addSectionTable(doc, y, "Expenses", ["Date", "Description", "Amount"],
+      d.expenses.map(t => [dateLabel, t.description || "-", money(t.amount)]), "No expenses recorded.");
+    y = addSectionTable(doc, y, "Payment In", ["Date", "Party", "Invoice No.", "Amount"],
+      d.paymentsIn.map(p => [dateLabel, p.partyName || "-", p.invoiceNo || "-", money(p.amount)]), "No payments received.");
+    y = addSectionTable(doc, y, "Payment Out", ["Date", "Party", "Invoice No.", "Amount"],
+      d.paymentsOut.map(p => [dateLabel, p.partyName || "-", p.invoiceNo || "-", money(p.amount)]), "No payments made.");
 
     doc.save(`FINGS-Daily-Report-${iso}.pdf`);
   }
 
   function generateMonthlyReport(monthStr) {
     const d = FINGS.data.entriesForMonth(monthStr);
+    const bal = FINGS.data.monthlyBalances(monthStr);
+    const money = FINGS.util.formatMoney;
     const totals = FINGS.data.computeTotals(monthStr);
     const doc = newDoc("Monthly Report", FINGS.util.monthLabel(monthStr));
 
     let y = summaryBlock(doc, 100, [
-      ["Total Sale", pdfMoney(totals.sale)],
-      ["Total Purchase", pdfMoney(totals.purchase)],
-      ["Total Expense", pdfMoney(totals.expense)],
-      ["Payment In", pdfMoney(totals.paymentIn)],
-      ["Payment Out", pdfMoney(totals.paymentOut)],
-      ["Net Cash Flow", pdfMoney(totals.paymentIn - totals.paymentOut - totals.expense)]
+      ["Opening Balance", money(bal.opening)],
+      ["Closing Balance", money(bal.closing)],
+      ["Total Sale", money(totals.sale)],
+      ["Total Purchase", money(totals.purchase)],
+      ["Total Expense", money(totals.expense)],
+      ["Payment In", money(totals.paymentIn)],
+      ["Payment Out", money(totals.paymentOut)],
+      ["Net Cash Flow", money(totals.paymentIn - totals.paymentOut - totals.expense)]
     ]);
 
-    y = addSectionTable(doc, y, "Sales", ["#", "Date", "Description / Bill", "Amount"],
-      d.sales.map((t, i) => [i + 1, FINGS.util.formatDatePretty(t.date), t.description || "-", pdfMoney(t.amount)]), "No sales this month.");
-    y = addSectionTable(doc, y, "Purchases", ["#", "Date", "Description / Bill", "Amount"],
-      d.purchases.map((t, i) => [i + 1, FINGS.util.formatDatePretty(t.date), t.description || "-", pdfMoney(t.amount)]), "No purchases this month.");
-    y = addSectionTable(doc, y, "Expenses", ["#", "Date", "Description", "Amount"],
-      d.expenses.map((t, i) => [i + 1, FINGS.util.formatDatePretty(t.date), t.description || "-", pdfMoney(t.amount)]), "No expenses this month.");
-    y = addSectionTable(doc, y, "Payment In", ["#", "Date", "Party", "Invoice No.", "Linked Bill", "Amount"],
-      d.paymentsIn.map((p, i) => [i + 1, FINGS.util.formatDatePretty(p.date), p.partyName || "-", p.invoiceNo || "-", linkedLabel(p), pdfMoney(p.amount)]), "No payments received this month.");
-    y = addSectionTable(doc, y, "Payment Out", ["#", "Date", "Party", "Invoice No.", "Linked Bill", "Amount"],
-      d.paymentsOut.map((p, i) => [i + 1, FINGS.util.formatDatePretty(p.date), p.partyName || "-", p.invoiceNo || "-", linkedLabel(p), pdfMoney(p.amount)]), "No payments made this month.");
+    y = addSectionTable(doc, y, "Sales", ["Date", "Invoice No.", "Description", "Status", "Amount"],
+      d.sales.map(t => [FINGS.util.formatDatePretty(t.date), t.invoiceNo || "-", t.description || "-", STATUS_LABEL[t.paymentStatus] || "Not Received", money(t.amount)]),
+      "No sales this month.");
+    y = addSectionTable(doc, y, "Purchases", ["Date", "Invoice No.", "Description", "Status", "Amount"],
+      d.purchases.map(t => [FINGS.util.formatDatePretty(t.date), t.invoiceNo || "-", t.description || "-", STATUS_LABEL[t.paymentStatus] || "Unpaid", money(t.amount)]),
+      "No purchases this month.");
+    y = addSectionTable(doc, y, "Expenses", ["Date", "Description", "Amount"],
+      d.expenses.map(t => [FINGS.util.formatDatePretty(t.date), t.description || "-", money(t.amount)]), "No expenses this month.");
+    y = addSectionTable(doc, y, "Payment In", ["Date", "Party", "Invoice No.", "Amount"],
+      d.paymentsIn.map(p => [FINGS.util.formatDatePretty(p.date), p.partyName || "-", p.invoiceNo || "-", money(p.amount)]), "No payments received this month.");
+    y = addSectionTable(doc, y, "Payment Out", ["Date", "Party", "Invoice No.", "Amount"],
+      d.paymentsOut.map(p => [FINGS.util.formatDatePretty(p.date), p.partyName || "-", p.invoiceNo || "-", money(p.amount)]), "No payments made this month.");
 
     doc.save(`FINGS-Monthly-Report-${monthStr}.pdf`);
   }
