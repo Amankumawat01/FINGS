@@ -1,0 +1,69 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validDate(value) {
+      return value is string && value.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function validMoney(value) {
+      return value is number && value > 0 && value < 1000000000;
+    }
+
+    match /config/business {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && request.resource.data.keys().hasOnly(['name', 'openingBalance', 'manualAdjustment'])
+        && request.resource.data.name is string
+        && request.resource.data.openingBalance is number
+        && request.resource.data.manualAdjustment is number;
+      allow delete: if false;
+    }
+
+    match /transactions/{id} {
+      allow read, delete: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['type', 'description', 'amount', 'date', 'createdAt'])
+        && request.resource.data.type in ['sale', 'purchase', 'expense']
+        && request.resource.data.description is string
+        && validMoney(request.resource.data.amount)
+        && validDate(request.resource.data.date)
+        && request.resource.data.createdAt is number;
+      allow update: if false;
+    }
+
+    match /payments/{id} {
+      allow read, delete: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['type', 'partyName', 'invoiceNo', 'date', 'amount', 'linkedTransactionId', 'createdAt'])
+        && request.resource.data.type in ['in', 'out']
+        && request.resource.data.partyName is string
+        && request.resource.data.invoiceNo is string
+        && validDate(request.resource.data.date)
+        && validMoney(request.resource.data.amount)
+        && (request.resource.data.linkedTransactionId == null || request.resource.data.linkedTransactionId is string)
+        && request.resource.data.createdAt is number;
+      allow update: if false;
+    }
+
+    match /users/{username} {
+      allow read: if signedIn();
+      allow create, update: if signedIn()
+        && username.matches('^[A-Za-z0-9_.-]{1,40}$')
+        && request.resource.data.keys().hasOnly(['username', 'passwordHash', 'name', 'role', 'createdAt'])
+        && request.resource.data.username == username
+        && request.resource.data.passwordHash is string
+        && request.resource.data.name is string
+        && request.resource.data.role in ['admin', 'staff']
+        && request.resource.data.createdAt is number;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

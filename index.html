@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>FINGS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="phone-frame">
+
+  <!-- ============ LOGIN VIEW ============ -->
+  <div id="view-login" class="screen active">
+    <div class="login-wrap">
+      <div class="brand">
+        <div class="brand-mark">F</div>
+        <h1>FINGS</h1>
+        <p class="brand-tag">Ledger &amp; cash flow, kept tight.</p>
+      </div>
+
+      <form id="login-form" class="card login-card" autocomplete="off">
+        <label class="field">
+          <span>Username</span>
+          <input type="text" id="login-username" placeholder="e.g. AGS_Admin" required autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" id="login-password" placeholder="••••••••" required autocomplete="off">
+        </label>
+        <p id="login-error" class="error-text hidden"></p>
+        <button type="submit" class="btn btn-primary btn-block" id="login-submit">
+          <span class="btn-label">Log in</span>
+          <span class="spinner hidden"></span>
+        </button>
+      </form>
+      <p class="login-footnote">Access is issued by your admin. Contact them for a username and password.</p>
+    </div>
+  </div>
+
+  <!-- ============ APP SHELL ============ -->
+  <div id="app-shell" class="hidden">
+
+    <header class="topbar">
+      <div class="topbar-brand">
+        <span class="topbar-mark">F</span>
+        <span class="topbar-title">FINGS</span>
+      </div>
+      <div class="topbar-user">
+        <span id="topbar-username" class="user-chip">—</span>
+        <button id="logout-btn" class="icon-btn" title="Log out" aria-label="Log out">⏻</button>
+      </div>
+    </header>
+
+    <main id="view-container">
+
+      <!-- ---------- DASHBOARD ---------- -->
+      <section id="view-dashboard" class="screen active">
+
+        <div class="bank-card card">
+          <div class="bank-half">
+            <span class="bank-label">Opening Balance</span>
+            <span class="bank-amount" id="stat-opening">₹0</span>
+          </div>
+          <div class="tear-divider" aria-hidden="true"></div>
+          <div class="bank-half">
+            <span class="bank-label">Actual Bank Balance</span>
+            <span class="bank-amount accent-emerald" id="stat-actual">₹0</span>
+          </div>
+        </div>
+
+        <div class="stat-row">
+          <div class="stat-box">
+            <span class="stat-box-label">Total Sale</span>
+            <span class="stat-box-value accent-emerald" id="stat-sale">₹0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-box-label">Total Purchase</span>
+            <span class="stat-box-value accent-gold" id="stat-purchase">₹0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-box-label">Total Expense</span>
+            <span class="stat-box-value accent-coral" id="stat-expense">₹0</span>
+          </div>
+        </div>
+        <p class="stat-caption">Totals for the current month</p>
+
+        <div class="card daily-pdf-card">
+          <div class="daily-pdf-row">
+            <div>
+              <span class="section-title-sm">Daily Report</span>
+              <p class="muted-sm">Every sale, purchase, expense &amp; payment for the day.</p>
+            </div>
+          </div>
+          <div class="daily-pdf-row">
+            <input type="date" id="daily-report-date" class="date-input">
+            <button id="daily-report-btn" class="btn btn-outline">Download PDF</button>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <span class="section-title">Recent activity</span>
+        </div>
+        <div id="transaction-list" class="tx-list">
+          <p class="empty-state">Nothing recorded yet. Tap + to add a sale, purchase, expense or payment.</p>
+        </div>
+
+      </section>
+
+      <!-- ---------- REPORTS ---------- -->
+      <section id="view-reports" class="screen">
+        <div class="section-head">
+          <span class="section-title">Monthly report</span>
+        </div>
+
+        <div class="card">
+          <label class="field">
+            <span>Month</span>
+            <input type="month" id="report-month" class="date-input">
+          </label>
+        </div>
+
+        <div class="stat-row stat-row-2">
+          <div class="stat-box">
+            <span class="stat-box-label">Total Sale</span>
+            <span class="stat-box-value accent-emerald" id="report-sale">₹0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-box-label">Total Purchase</span>
+            <span class="stat-box-value accent-gold" id="report-purchase">₹0</span>
+          </div>
+        </div>
+        <div class="stat-row stat-row-2">
+          <div class="stat-box">
+            <span class="stat-box-label">Total Expense</span>
+            <span class="stat-box-value accent-coral" id="report-expense">₹0</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-box-label">Net Cash Flow</span>
+            <span class="stat-box-value" id="report-net">₹0</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="daily-pdf-row">
+            <span>Payment In</span>
+            <span class="mono accent-emerald" id="report-payin">₹0</span>
+          </div>
+          <div class="daily-pdf-row">
+            <span>Payment Out</span>
+            <span class="mono accent-coral" id="report-payout">₹0</span>
+          </div>
+        </div>
+
+        <button id="monthly-report-btn" class="btn btn-primary btn-block">Download Monthly PDF</button>
+
+        <div class="section-head">
+          <span class="section-title">Entries this month</span>
+        </div>
+        <div id="report-list" class="tx-list">
+          <p class="empty-state">No entries for this month yet.</p>
+        </div>
+      </section>
+
+      <!-- ---------- SETTINGS ---------- -->
+      <section id="view-settings" class="screen">
+
+        <div class="segmented" id="settings-tabs">
+          <button class="segmented-btn active" data-tab="profile">Profile</button>
+          <button class="segmented-btn" data-tab="users">Users</button>
+        </div>
+
+        <div id="settings-profile" class="settings-pane">
+          <div class="card">
+            <label class="field">
+              <span>Business / Display Name</span>
+              <input type="text" id="profile-name" placeholder="e.g. AGS Traders">
+            </label>
+            <label class="field">
+              <span>Opening Balance</span>
+              <input type="number" id="profile-opening" placeholder="0" inputmode="decimal">
+            </label>
+            <label class="field">
+              <span>Actual Bank Balance</span>
+              <input type="number" id="profile-actual" placeholder="0" inputmode="decimal">
+            </label>
+            <p class="muted-sm">Editing actual balance records a manual adjustment (e.g. bank reconciliation). Future payments still update it automatically.</p>
+            <button id="profile-save-btn" class="btn btn-primary btn-block">Save changes</button>
+            <p id="profile-readonly-note" class="muted-sm hidden">Only the admin can edit balances. You're viewing in read-only mode.</p>
+          </div>
+        </div>
+
+        <div id="settings-users" class="settings-pane hidden">
+          <div class="section-head">
+            <span class="section-title">Team</span>
+            <button id="add-user-btn" class="btn btn-outline btn-sm hidden">+ Add user</button>
+          </div>
+          <div id="user-list" class="tx-list">
+            <p class="empty-state">Loading users…</p>
+          </div>
+        </div>
+
+        <button id="settings-logout-btn" class="btn btn-danger btn-block">Log out</button>
+      </section>
+
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-btn active" data-view="dashboard">
+        <span class="nav-icon">▦</span>
+        <span class="nav-label">Dashboard</span>
+      </button>
+      <button class="nav-btn" data-view="reports">
+        <span class="nav-icon">▤</span>
+        <span class="nav-label">Report</span>
+      </button>
+      <button class="nav-btn" data-view="settings">
+        <span class="nav-icon">⚙</span>
+        <span class="nav-label">Settings</span>
+      </button>
+    </nav>
+
+    <button id="fab-add" class="fab" aria-label="Add entry">+</button>
+  </div>
+
+  <!-- ============ BOTTOM SHEET (dynamic forms) ============ -->
+  <div id="sheet-overlay" class="sheet-overlay hidden"></div>
+  <div id="bottom-sheet" class="bottom-sheet hidden">
+    <div class="sheet-handle"></div>
+    <div id="sheet-body"></div>
+  </div>
+
+  <!-- ============ ADD MENU (fab options) ============ -->
+  <div id="add-menu-overlay" class="sheet-overlay hidden"></div>
+  <div id="add-menu" class="add-menu hidden">
+    <button class="add-menu-item" data-type="sale"><span class="dot accent-emerald-bg"></span>Add Sale</button>
+    <button class="add-menu-item" data-type="purchase"><span class="dot accent-gold-bg"></span>Add Purchase</button>
+    <button class="add-menu-item" data-type="expense"><span class="dot accent-coral-bg"></span>Add Expense</button>
+    <button class="add-menu-item" data-type="payment-in"><span class="dot accent-emerald-bg"></span>Payment In</button>
+    <button class="add-menu-item" data-type="payment-out"><span class="dot accent-coral-bg"></span>Payment Out</button>
+    <button class="add-menu-item add-menu-cancel" data-type="cancel">Cancel</button>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+</div>
+
+<!-- Firebase (compat build — no bundler needed) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<!-- PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/data.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/pdf.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
